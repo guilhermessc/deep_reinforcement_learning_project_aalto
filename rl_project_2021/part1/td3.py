@@ -4,9 +4,9 @@ import copy
 import time
 import random
 
-import pybullet_envs
 import gym
 import wandb
+import pybullet_envs
 import numpy as np
 import torch
 import torch.nn as nn
@@ -19,11 +19,27 @@ def eval_policy(policy, eval_env, eval_episodes=10):
     # Runs policy for X episodes and returns average reward
     # A fixed seed is used for the eval environment
 
+    list_rewards = []
+    for _ in range(eval_episodes):
+        state, done = eval_env.reset(), False
+        episode_timesteps = 0
+        discounted_rewards = 0
+        
+        while not done:
+            episode_timesteps += 1
+            action = td3.select_action(np.array(state)).clip(-max_action, max_action)
+            state, reward, done, _ = eval_env.step(action)            
+            done = True if (episode_timesteps >= eval_env._max_episode_steps) else False
+            
+            discounted_rewards = discounted_rewards/policy.discount + reward
+        list_rewards.append(discounted_rewards * np.power(policy.discount, episode_timesteps))
+
+
     # TODO: Implement the evaluation over eval_episodes and return the avg_reward
-    avg_reward = 0.
+    avg_reward = np.mean(list_rewards)
 
 
-    return {'returns': avg_reward}
+    return {'returns': avg_reward}  
 
 
 def fill_initial_buffer(env, replay_buffer, n_random_timesteps):
@@ -171,13 +187,40 @@ class TD3(object):
         # TODO: Update the critic network
         # Hint: You can use clamp() to clip values
         # Hint: Like before, pay attention to which variable should be detached.
+        with torch.no_grad():
+            epsilon = torch.randn_like(action) * self.policy_noise
+            epsilon = epsilon.clamp(-self.noise_clip, self.noise_clip)
 
+            next_action = self.actor_target(next_state) + epsilon
+            next_action = next_action.clamp(-self.max_action, self.max_action)
 
+            # Compute the target Q value
+            target_Q1, target_Q2 = self.critic_target(next_state, next_action)
+            target_Q = torch.min(target_Q1, target_Q2)
+            target_Q = reward + not_done * self.discount * target_Q
+
+        # Get current Q estimates
+        current_Q1, current_Q2 = self.critic(state, action)
+
+        # Compute critic loss
+        critic_loss = F.mse_loss(current_Q1, target_Q) + F.mse_loss(current_Q2, target_Q) 
+
+        # Optimize the critic
+        self.critic_optimizer.zero_grad()
+        critic_loss.backward()
+        self.critic_optimizer.step()
 
         # Delayed policy updates
         if self.total_it % self.policy_freq == 0:
 
             # TODO: Update the policy network
+            # Compute actor losse
+            actor_loss = -self.critic(state, self.actor(state))[0].mean()
+            
+            # Optimize the actor 
+            self.actor_optimizer.zero_grad()
+            actor_loss.backward()
+            self.actor_optimizer.step()
             
 
             # Update the frozen target models, both actor and critic
