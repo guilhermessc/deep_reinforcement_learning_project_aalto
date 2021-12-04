@@ -151,8 +151,8 @@ class TD3(object):
         max_action,
         discount=0.99,
         tau=0.005,
-        policy_noise=0.2,
-        noise_clip=0.5,
+        policy_noise=0.4,
+        noise_clip=0.8,
         policy_freq=2,
     ):
 
@@ -347,16 +347,16 @@ if __name__ == "__main__":
 
         # update policy per data point
         policy_update_info = td3.train(replay_buffer.sample(args.batch_size))
-        wandb.log({"train/": policy_update_info})
+        wandb.log({"train_mod/": policy_update_info})
 
         # Evaluate episode
         if t % args.eval_freq == 0:
             eval_info = eval_policy(td3, eval_env)
             eval_info.update({'timesteps': t})
             print(f"Time steps: {t}, Eval_info: {eval_info}")
-            wandb.log({"eval/": eval_info}) 
+            wandb.log({"eval_mod/": eval_info}) 
 
     if True: #args.save_model:
-        td3.save(f"./{experiment_name}")
+        td3.save(f"./{experiment_name}_mod")
 
     env.close()

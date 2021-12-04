@@ -154,6 +154,7 @@ class TD3(object):
         policy_noise=0.2,
         noise_clip=0.5,
         policy_freq=2,
+        alpha=2.5
     ):
 
         self.actor = Actor(state_dim, action_dim, max_action).to(device)
@@ -170,6 +171,7 @@ class TD3(object):
         self.policy_noise = policy_noise
         self.noise_clip = noise_clip
         self.policy_freq = policy_freq
+        self.alpha = alpha
 
         self.total_it = 0
 
@@ -215,7 +217,11 @@ class TD3(object):
 
             # TODO: Update the policy network
             # Compute actor losse
-            actor_loss = -self.critic(state, self.actor(state))[0].mean()
+            pi = self.actor(state)
+            Q = self.critic.forward(state, pi)[0]
+            lmbda = self.alpha/Q.mean().abs().detach()
+
+            actor_loss = -lmbda * Q.mean() + F.mse_loss(pi, action) 
             
             # Optimize the actor 
             self.actor_optimizer.zero_grad()
@@ -347,14 +353,14 @@ if __name__ == "__main__":
 
         # update policy per data point
         policy_update_info = td3.train(replay_buffer.sample(args.batch_size))
-        wandb.log({"train/": policy_update_info})
+        wandb.log({"train_part2_mod/": policy_update_info})
 
         # Evaluate episode
         if t % args.eval_freq == 0:
             eval_info = eval_policy(td3, eval_env)
             eval_info.update({'timesteps': t})
             print(f"Time steps: {t}, Eval_info: {eval_info}")
-            wandb.log({"eval/": eval_info}) 
+            wandb.log({"eval_part2_mod/": eval_info}) 
 
     if True: #args.save_model:
         td3.save(f"./{experiment_name}")

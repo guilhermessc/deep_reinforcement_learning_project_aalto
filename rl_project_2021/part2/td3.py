@@ -362,7 +362,7 @@ if __name__ == "__main__":
             print(f"Time steps: {t}, Eval_info: {eval_info}")
             wandb.log({"eval_part2/": eval_info}) 
 
-    if args.save_model:
+    if True: #args.save_model:
         td3.save(f"./{experiment_name}")
 
     env.close()
