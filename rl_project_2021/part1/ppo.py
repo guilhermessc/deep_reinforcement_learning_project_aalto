@@ -31,11 +31,35 @@ class Agent(nn.Module):
         # Hint: When initializing neural networks, you can use the default std. 
         #       But for the last layer of critic, set std=1. And for the last layer of actor_mean, set std=0.01. 
         #       actor_logstd should be a learnable value as in previous assignments, and its initial value is 0
-        self.critic = 
-        
-        self.actor_mean = 
+        hiddenSize = 64
+        self.critic = nn.Sequential(
+            nn.Linear(state_dim, hiddenSize),
+            nn.Tanh(),
+            nn.Linear(hiddenSize, hiddenSize),
+            nn.Tanh(),
+            nn.Linear(hiddenSize, 1)
+        )
+        for it, layer in enumerate(self.critic):
+            if type(layer)== nn.Linear:
+                if it != 4:
+                    nn.init.normal_(layer.weight)
+                else:
+                    nn.init.normal_(layer.weight, std=1.0)
+        self.actor_mean = nn.Sequential(
+            nn.Linear(state_dim, hiddenSize),
+            nn.Tanh(),
+            nn.Linear(hiddenSize, hiddenSize),
+            nn.Tanh(),
+            nn.Linear(hiddenSize, action_dim),
+        )
+        for it, layer in enumerate(self.critic):
+            if type(layer)== nn.Linear:
+                if it != 4:
+                    nn.init.normal_(layer.weight)
+                else:
+                    nn.init.normal_(layer.weight, std=0.01)
+        self.actor_logstd = nn.Parameter(torch.zeros(action_dim))
 
-        self.actor_logstd = 
 
     def get_action(self, x, action=None):
         action_mean = self.actor_mean(x)
@@ -111,9 +135,21 @@ class PPOBuffer(object):
         # Hint: https://www.davidsilver.uk/wp-content/uploads/2020/03/MC-TD.pdf should be helpful
         #       Page 47 (Telescoping in TD(\lambda)) shows how to calculate returns $G^{\lambda}_t$.
         #       Also notice that in this page, $G^{\lambda}t - V(s_t)$ equals to the equation (11) in the PPO paper
-
-
-
+        gae = 0
+        self.values[self.ptr] = last_value.cpu()
+        
+        if done ==[1.]:
+            for step in reversed(range(len(self.rewards)-1)):
+                delta = self.rewards[step] + self.gamma * self.values[step +1] - self.values[step]
+                gae = delta + self.gamma * self.gae_lambda * gae
+                #unclear where to put it??
+                self.returns[step] = gae + self.values[step]
+                self.advantages[step] = gae
+        else:
+            gae = self.rewards[self.ptr]
+            #unclear where to put it??
+            self.returns[self.ptr] = gae + last_value.to('cpu').detach().numpy()
+            self.advantages[self.ptr] = gae
 
     def get(self, batch_size):
         # Draw samples to train the actor and critic networks. 
@@ -197,25 +233,25 @@ class PPO(object):
             After collecting data, the returns and advantages will be calculated via GAE.
         """
         eval_info = {}
-        
         for step in range(0, num_timesteps_per_env):
             self.total_timesteps += 1 * self.num_envs
-
             # TODO: collect data from the environment and add them into buffer
             # Hint: Notice the type of a variable. Is it a numpy, a tenser on CPU or a tensor on GPU?
             # Hint: We use gym.wrappers.RecordEpisodeStatistics(env) to automatically reset env at the end of one episode. See make_env().
-            # Hint: Call self.buffer.add() to fill needed varialbes into buffer.
-
-
-
-
+            # # Hint: Call self.buffer.add() to fill needed varialbes into buffer.
+            tt = torch.from_numpy(self.states)
+            tensor_state = torch.tensor(tt, device = device)
+            action, logprob , _ = self.agent.get_action(tensor_state)
+            ns, r, d, infos = envs.step(action.to('cpu'))
+            value = self.agent.get_value(tensor_state)
             # Unlike TD3, in PPO, we didn't process the done flag when episode_timesteps == env._max_episode_steps,
             # This will change the problem to obtain the maximal returns within env._max_episode_steps. You can compare the difference.
             for info in infos:  # infos is the information dictionary obtained when calling env.step(): ns, r, d, infos = envs.step(a)
                 if 'episode' in info.keys():
                     eval_info[self.total_timesteps] = info['episode']['r']
                     break
-        
+            self.buffer.add(self.states, action.to('cpu').detach().numpy(), r, d, value.to('cpu').detach().numpy(), logprob.to('cpu').detach().numpy())
+
         with torch.no_grad():
             last_value = self.agent.get_value(torch.FloatTensor(self.states).to(device))
         # Calculate the returns and advantages via GAE, please implement this.
@@ -227,8 +263,7 @@ class PPO(object):
 
         for epoch in range(self.update_epochs):
             for data in self.buffer.get(self.mini_batch_size): 
-                states, actions, logprobs, returns, advantages = data 
-
+                states, actions, logprobs, returns, advantages = data
                 # calculate the loss and update the weights of nn
                 # TODO: Implement the loss according to eq (7)(9) in https://arxiv.org/pdf/1707.06347.pdf 
                 # Hint: For the value loss, we just use the simple mse loss. 'returns' are the targets.
@@ -239,10 +274,26 @@ class PPO(object):
 
                 # 1. complete the missing losses: pg_loss, entropy_loss and v_loss
                 
+                _ , new_logprobs, entropy = self.agent.get_action(states, actions)
+                new_values = self.agent.get_value(states)
+
+                #New stuff
+                #ratio = (new_log_probs - log_probs).exp()
+                ratio = new_logprobs / logprobs
+                first = ratio * advantages
+                second = torch.clamp(ratio, 1- self.clip_ratio, 1 + self.clip_ratio) * advantages
+                pg_loss = - torch.min(first, second).mean()
+
+                entropy_loss = entropy.mean()
+                v_loss = (returns - new_values).pow(2).mean()
+
                 loss = pg_loss - self.ent_coef * entropy_loss + self.vf_coef * v_loss
 
                 # 2. update weights with self.optimizer
-
+                #print("Le losse" + str(loss))
+                self.optimizer.zero_grad()
+                loss.backward()
+                self.optimizer.step()
 
                 # stats
                 approx_kl = (logprobs - new_logprobs).mean()
@@ -374,14 +425,14 @@ if __name__ == "__main__":
         eval_info = ppo.collect_data(num_timesteps_per_env=args.num_timesteps_per_env)
 
         for k, v in eval_info.items():
-            wandb.log({'eval/': {'timesteps': k, 'returns': v}})
+            wandb.log({'ppo_eval/': {'timesteps': k, 'returns': v}})
 
         if args.anneal_lr:
             ppo.update_lr(update, num_updates)
         
         # train the policy with collected data
         update_info = ppo.train()
-        wandb.log({'train/': update_info})
+        wandb.log({'ppo_train/': update_info})
     
     if args.save_model:
         ppo.save(f"./{experiment_name}")
