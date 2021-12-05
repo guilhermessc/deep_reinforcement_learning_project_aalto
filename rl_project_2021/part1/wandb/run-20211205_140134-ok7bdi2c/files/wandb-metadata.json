@@ -1,0 +1,24 @@
+{
+    "os": "Linux-4.15.0-162-generic-x86_64-with-glibc2.10",
+    "python": "3.8.3",
+    "heartbeatAt": "2021-12-05T12:01:38.350213",
+    "startedAt": "2021-12-05T12:01:34.633147",
+    "docker": null,
+    "gpu": "GeForce 940MX",
+    "gpu_count": 1,
+    "cpu_count": 4,
+    "cuda": null,
+    "args": [],
+    "state": "running",
+    "program": "ppo.py",
+    "codePath": "rl_project_2021/part1/ppo.py",
+    "git": {
+        "remote": "git@github.com:guilhermessc/deep_reinforcement_learning_project_aalto.git",
+        "commit": "379a4e9f7698ec95a1199aac054ced17e3830010"
+    },
+    "email": "camps@campus.tu-berlin.de",
+    "root": "/home/paavo/Aalto/ReinforcementLeearning/deep_reinforcement_learning_project_aalto",
+    "host": "Goose",
+    "username": "paavo",
+    "executable": "/home/paavo/anaconda3/bin/python"
+}

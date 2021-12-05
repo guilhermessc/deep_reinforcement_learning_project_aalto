@@ -121,7 +121,7 @@ class PPOBuffer(object):
         self.actions[self.ptr] = action.cpu().numpy() if isinstance(action, torch.Tensor) else action
         self.rewards[self.ptr] = reward
         self.start_episodes[self.ptr] = start_episode
-        self.values[self.ptr] = value.cpu().numpy() if isinstance(action, torch.Tensor) else value
+        self.values[self.ptr] = value.cpu().numpy() if isinstance(action,   torch.Tensor) else value
         self.logprobs[self.ptr] = logprob.cpu().numpy() if isinstance(action, torch.Tensor) else logprob
 
         self.ptr = (self.ptr + 1) % self.buffer_size
@@ -278,15 +278,14 @@ class PPO(object):
                 new_values = self.agent.get_value(states)
 
                 #New stuff
-                #ratio = (new_log_probs - log_probs).exp()
-                ratio = new_logprobs / logprobs
+                ratio = (new_logprobs - logprobs).exp()
+                #ratio = new_logprobs / logprobs
                 first = ratio * advantages
                 second = torch.clamp(ratio, 1- self.clip_ratio, 1 + self.clip_ratio) * advantages
                 pg_loss = - torch.min(first, second).mean()
 
                 entropy_loss = entropy.mean()
                 v_loss = (returns - new_values).pow(2).mean()
-
                 loss = pg_loss - self.ent_coef * entropy_loss + self.vf_coef * v_loss
 
                 # 2. update weights with self.optimizer

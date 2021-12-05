@@ -1,0 +1,1 @@
+{"ppo_eval/": {"timesteps": 2000, "returns": -1544.74609375}, "_runtime": 15, "_timestamp": 1638639039, "_step": 2, "ppo_train/": {"step": 0, "lr": 0.0003, "val_loss": 0.12415274977684021, "pi_loss": 0.7513436079025269, "entropy": 8.367488861083984, "approx_kl": 0.020851105451583862}}
