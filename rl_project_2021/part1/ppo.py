@@ -142,12 +142,10 @@ class PPOBuffer(object):
             for step in reversed(range(len(self.rewards)-1)):
                 delta = self.rewards[step] + self.gamma * self.values[step +1] - self.values[step]
                 gae = delta + self.gamma * self.gae_lambda * gae
-                #unclear where to put it??
                 self.returns[step] = gae + self.values[step]
                 self.advantages[step] = gae
         else:
             gae = self.rewards[self.ptr]
-            #unclear where to put it??
             self.returns[self.ptr] = gae + last_value.to('cpu').detach().numpy()
             self.advantages[self.ptr] = gae
 
@@ -278,18 +276,19 @@ class PPO(object):
                 new_values = self.agent.get_value(states)
 
                 #New stuff
-                ratio = (new_logprobs - logprobs).exp()
+                log_temp = new_logprobs - logprobs
+                ratio = log_temp.exp()
                 #ratio = new_logprobs / logprobs
                 first = ratio * advantages
                 second = torch.clamp(ratio, 1- self.clip_ratio, 1 + self.clip_ratio) * advantages
                 pg_loss = - torch.min(first, second).mean()
 
                 entropy_loss = entropy.mean()
-                v_loss = (returns - new_values).pow(2).mean()
+                v_temp = returns - new_values
+                v_loss = v_temp.pow(2).mean()
                 loss = pg_loss - self.ent_coef * entropy_loss + self.vf_coef * v_loss
 
                 # 2. update weights with self.optimizer
-                #print("Le losse" + str(loss))
                 self.optimizer.zero_grad()
                 loss.backward()
                 self.optimizer.step()
